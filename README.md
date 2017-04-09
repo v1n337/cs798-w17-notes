@@ -1,1 +1,1 @@
-# cs798-w17-notes
+# CS798 - Winter 2017 - Advanced Distributed Systems

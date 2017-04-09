@@ -1,0 +1,1539 @@
+\documentclass[a4paper]{article}
+
+\usepackage[a4paper,top=3cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1cm]{geometry}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\graphicspath {{images/}}
+
+\begin{document}
+
+\title{CS798 (Winter 2017) Notes}
+\author{Vineet John (v2john@uwaterloo.ca)}
+\date{}        
+\maketitle
+
+\section{Overview}
+
+\subsection{Motivation for distributed systems}
+Performance, scalability, availability
+
+\subsection{Requirements for distributed systems}
+
+\subsubsection{Communications}
+The distributed systems talking to each other
+
+\subsubsection{Fault tolerance}
+
+Continue running at a lower level of performance or availability
+
+Considerations: 
+\begin{itemize}
+    \item
+    Where to fix the problem? End-to-end .. like ACK
+    \item
+    What state to recover to? Depends on the application. Might even choose to not recover to any former state. 
+    \item
+    When to recover? Eager, lazy or when needed
+\end{itemize}
+
+\subsubsection{Concurrency/Consistency}
+
+\begin{itemize}
+    \item
+    Goals is to leverage the concurrecy to use faster systems
+    \item
+    Challenge is maintaining correctness on multiple copies of the data
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Data Center Hardware \& Services}
+
+\subsection{Hardware}
+
+\subsubsection{Motivation for Data-Centers}
+
+\begin{itemize}
+\item
+    Economy of scale
+\item
+    Considerations
+    \begin{itemize}
+        \item
+        High performance (requests per sec)
+    \item
+        Inexpensive (requests per \$)
+    \item
+        Power-efficiency (requests per watt)
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Computation}
+
+\begin{itemize}
+\item
+    SMP = Shared Multi-processor
+    \begin{itemize}
+        \item
+        HPC
+    \item
+        Expensive
+    \end{itemize}
+\item
+    Commodity hardware
+    \begin{itemize}
+        \item
+        Inexpensive
+    \item
+        Lower cost
+    \end{itemize}
+\item
+    Wimpy nodes
+
+    \begin{itemize}
+        \item
+        Speedup limit is determined by Amdahl's law. \\$\frac{1}{1 - p}$ where p represents the fraction of parallelized code.
+    \item
+        Network cost
+    \item
+        Low utilization
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Storage}
+
+\begin{itemize}
+\item
+    NAS - Network Attached Storage
+
+    \begin{itemize}
+        \item
+        Easy deployment
+    \item
+        Easier maintenance
+    \item
+        Low write overhead
+    \end{itemize}
+\item
+    Distributed Systems - GFS
+
+    \begin{itemize}
+        \item
+        Cost effective
+    \item
+        High availability - not dependent on a single appliance
+    \item
+        Higher perfomance - many networks
+    \item
+        Higher network overhead
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Fault tolerance - Replication / Erasure coding}
+
+\subsubsection{Switches}
+
+\begin{itemize}
+\item
+    Hierarchy used for fault tolerance
+\end{itemize}
+
+\subsubsection{Paradigm Shifts}
+
+\begin{itemize}
+\item
+    Large Memory
+\item
+    Flash, Kinetic Disks, Shingled Disks
+\item
+    Software-defined networking
+\end{itemize}
+
+\subsection{Software}
+
+\begin{itemize}
+\item
+    Online - queries, high availability
+\item
+    Offline - batch processing, compute + I/O intensive
+\end{itemize}
+
+\subsubsection{Metrics for availability}
+
+\begin{itemize}
+\item
+    Uptime (percent of time where service is available)
+\item
+    Yield (percent of requests served)
+\item
+    Harvest (percent of data available)
+\item
+    DQ principle : Data per query * QPS = constant
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{RPC}
+
+\subsection{Modes of Communication}
+
+\begin{itemize}
+\item
+    Raw message passing: Low level, and not easy to use
+
+    \begin{itemize}
+        \item
+        TCP/IP: reliable stream
+    \item
+        UDP: unreliable, connectionless, packet oriented
+    \end{itemize}
+\item
+    Distributed shared memory - remote access done if copy isn't present
+    locally. Application is agnostic of the network components\\
+    Higher overhead, and failure handling is difficult
+\item
+    File system - Low level + slow
+\item
+    RPC - middle ground: Easy to program, and doesn't require sharing of
+    the complete address space
+\end{itemize}
+
+For the RPC architecture, refer to the paper
+
+\subsection{Working of RPC}
+When making a remote call, five pieces of program are involved: the user, the user-stub, the RPC communications package (known as RPCRuntime), the server-stub, and the server. The user, the user-stub, and one instance of RPCRuntime execute in the caller machine; the server, the server-stub and another instance of RPCRuntime execute in the callee machine.
+
+\subsubsection{Problems}
+\begin{itemize}
+\item
+    Pointers to local address space, and invocation on a remote node.
+\item
+    Semantics in the event of failures.
+\item
+    Binding the callee to the RPC made by a caller.
+\item
+    Integration of remote calls into programmming systems.
+\end{itemize}
+
+\subsubsection{Grapevine}
+Grapevine is the lookup database for this RPC implementation. There are 2 types of entries in the lookup table, `Type' and `Instance'.
+\begin{itemize}
+\item
+    Type is a list of all the Grapevine individuals that are part of a group represented by `type'.
+\item
+    Instance is the network address of any given Grapevine individual.
+\end{itemize}
+
+\subsubsection{Binding to remote servers}
+\begin{itemize}
+\item
+    System described in the paper uses Grapevine (reliable \& replicated)
+\item
+    Client gets the address from Grapevine, then uses the address and
+    function id to invoke the procedure
+\item
+    Server returns Table index and function ID to the client
+\item
+    Client tries to invoke the function using table index, fun ID, call ID
+    and args
+\item 
+    There are 3 different types of binding:
+    \begin{itemize}
+        \item Importer specifies only the type of the interface, the instance is chosen dynamically.
+        \item Importer specifies that RName, which delays the resolution of the actual instance.
+        \item Importer explicitly specifies the instance that it wants to run the RPC on.
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{RPC-Runtime}
+
+\begin{itemize}
+\item
+    Why not TCP? High overhead in terms of latency and server state (having to keep several open TCP connections)
+\item
+    Why not UDP? Unreliable, doesn't wait for acknowledgements of packet
+    reception
+\item
+    This custom protocol doesn't maintain much state when inactive. When the connection is idle the only state information in the server machine is the entry in its table of sequence numbers
+\item
+    Call ID used to enforce `precisely once' semantics of procedure execution. Call sequence numbers are monotonically increasing. Each calling activity has a latest call ID stored on callee machines.
+    All the calls made to the callee machines should have Call IDs greater than this number, else the precisely once semantics will be violated.
+\item
+    Probes the server periodically to ensure that the server is still up
+\item
+    No time out mechanism, to emulate what would happen with local calls.
+\end{itemize}
+
+
+\subsubsection{Call semantics}
+\begin{itemize}
+    \item Initial call from the caller doesn't request an ack. Subsequent transmissions explicitly request an ack.
+    \item If the arguments (or results) are too large to fit in a single packet, they are sent in multiple packets with each but the last requesting explicit acknowledgment.
+    \item Each call contains a destination process ID, too. The initial call guesses, it but subsequent calls use the incoming call's source process identifier to determine it.
+    \item Each instance maintains a set of idle process to handle incoming requests.
+    \item Exceptions thrown are only those that are present in the interface. The rest are debugged.
+\end{itemize}
+
+
+\subsubsection{Sending large packets}
+
+\begin{itemize}
+\item
+    Ordered segments of request packets sent sequentially
+\item
+    Slow and inefficient, but easy to implement
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{U-Net}
+
+Network latency = dominating factor for workloads dealing with huge data\\
+Processing time = dominating factor for smaller workloads
+NI = Network Interface
+VCI = Virtual Channel Identifier. Part of an ATM cell's header that helps it identify a destination.
+
+\subsection{Motivation}
+
+\begin{itemize}
+    \item 
+    The main idea is to remove the kernel from the communication path.
+    \item
+    Software being the bottleneck once the network speeds increase.
+    \item
+    Application specific-protocols could be used to communicate with the NI
+    \item
+    Low level network protocol optimization for transactions for which overheads dominate. This will work best for networks with bursts of small data chunks. The idea is to reduce the overhead per chunk.
+\end{itemize}
+
+\subsection{Prior Implementation}
+
+\begin{itemize}
+    \item
+    All communication was routed through the kernel
+    \item
+    Kernel also muxes/demuxes the incoming/outgoing data
+    \item
+    For reliable communication like TCP, the application needs to hold onto the data.
+    \item 
+    Shared memory space as network access.
+\end{itemize}
+
+\subsection{Unet Stack}
+
+\begin{itemize}
+    \item 
+    What's different in UNet? = Bypass the kernel and allow applications to access the NI
+    \item 
+    The paper shows how U-Net can be used to implement protocols such as TCP/IP and UDP/IP.
+    \item
+    The main role of UNet is to multiplex the network interface as a resource between multiple different processes.
+    \item
+    Driver for the network interface card to ensure that the received data is sent to the application that requested it.
+    \item
+    Upcalls are the name given to events in the U-Net stack.
+    \item
+    On the creation of a channel, a tag is registered with U-Net. Also, a channel identifier is created.
+    \item 
+    Small messages can be fit entirely in the send and receive queues, without having to access the communication segment.
+    \item
+    The difference between base-level UNet and direct access UNet is that direct access UNet can specify an offset of the address space in the destination communication segment, to which the data is copied to.
+    \item 
+    In general, UNet seems to acheive full bandwidth usage even with messages as small as 800 - 1000 bytes.
+    \item
+        Components
+        \begin{itemize}
+            \item
+            Communication segment - data descriptors stored here
+            \item
+            Send, receive, free queues
+        \end{itemize}
+    \item
+        Sending data:
+        \begin{itemize}
+            \item
+            Copy data to communication segement
+            \item
+            Add data descriptor to the send queue
+            \item
+            NIC pulls descriptor, gets message from comm. segment and sends the message
+        \end{itemize}
+    \item
+        Receiving data:
+        \begin{itemize}
+            \item
+                Pull wire for msg. (A wire protocol refers to a way of getting data from point to point.)
+            \item
+                Demux to the proper end-point - each end-point has a specific channel ID
+            \item
+                Get descriptor from the free queue - (if the free queue is empty,drop packets)
+            \item
+                Put data in the comm. segment
+            \item
+                Put descriptor in the receive queue
+            \item
+                Application notification
+            \item
+                Application reads message
+            \item
+                Put the descriptor in the free queue
+        \end{itemize}
+\end{itemize}
+
+\subsection{DMA}
+
+\begin{itemize}
+\item
+    Pinned memory (in the context of DMA) - memory that is unswappable to disk
+\item
+    All memory cannot be pinned as it's a limited resource
+\item
+    DMA address is smaller?
+\end{itemize}
+
+\subsection{Optimizations}
+
+\begin{itemize}
+    \item
+    Comm. segment pinned in memory
+    \item
+    Free queue on the NI
+    \item
+    Send queue on the NI
+    \item
+    Receive queue on memory
+\end{itemize}
+
+\subsection{Emulated end-points}
+
+\begin{itemize}
+    \item
+    For applications that don't need the application specific optimization
+    benefits of an end-point
+    \item
+    Kernel handles the muxing/demuxing for emulated end-points
+\end{itemize}
+
+\subsection{Zero-copy vs True zero-copy}
+
+\begin{itemize}
+    \item
+    Zero copy involves making a buffer containing the data in a communication segment. Technically, this still makes a copy before sending.
+    \item
+    True zero copy doesn't need a buffer in the NI. The NI needs an MMU (Memory Management Unit) to copy the data to memory of the destination address to place the data on.
+    \item 
+    U-Net supports both, zero copy as well as true zero copy, but describes the implementation with zero-copy in the paper.
+\end{itemize}
+
+\subsection{UAM (U-Net Active messages)}
+
+\begin{itemize}
+    \item 
+    An Active Message contains the address of a handler that gets called on receipt of the message followed by upto four words of arguments
+    \item
+    Flow control issues are managed by a 'Go-back-N' retransmission mechanism.
+    \item 
+    The difference between UNet and UAM is that UAM incurs an overhead due to being reliable.
+    \item
+    Uses windows of buffers
+\end{itemize}
+
+\subsubsection{Sending messages}
+
+\begin{itemize}
+\item
+    Read all received messages (to check if there are any received
+    acknowledgements)
+\item
+    Push message to send queue
+\item
+    If the send queue is full:
+    \begin{itemize}
+        \item
+        Pull incoming messages
+    \item
+        Timeout/retry
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Receiving messages}
+
+\begin{itemize}
+\item
+    Consume the receive queue
+\item
+    Acknowledge each of them
+\item
+    Put the descriptor in the free queue, to free up memory in the
+    communication segment
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Fault Tolerance}
+
+\subsection{Paper review}
+
+\subsubsection{Important points}
+
+\begin{itemize}
+\item
+    Deals with the following aspects of failure
+
+    \begin{itemize}
+        \item
+        Which components fail most often?
+    \item
+        Discussion about failure case studies
+    \item
+        Failure mitigation mechanisms and their applicabilty
+    \item
+        Recommends improved operator tools etc.
+    \end{itemize}
+\item
+    3 systems are compared
+
+    \begin{itemize}
+        \item
+        Online - a portal service
+
+        \begin{itemize}
+                \item
+            Combination of a web proxy + statefull \& statless servers in the
+            backend
+        \item
+            Data is stored on NASs and accessed over UDP + NFS
+        \end{itemize}
+    \item
+        Content - a content hosting service
+
+        \begin{itemize}
+                \item
+            Stateless metadata servers communicate with the actual data
+            servers.
+        \item
+            Metadata servers are behind a load-balancing switch from the POV
+            of the clients.
+        \end{itemize}
+    \item
+        ReadMostly - a mature read mostly service
+
+        \begin{itemize}
+                \item
+            Few front-ends communicate directly with the data servers via TCP
+        \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Metrics}
+
+\begin{itemize}
+\item
+    MTTR = Mean Time To Repair
+\item
+    Availabilty = MTBF(Mean time between failures) / Total time
+\end{itemize}
+
+\subsubsection{Mitigation measures suggested}
+
+\begin{itemize}
+\item
+    Correctness testing - testing prior to deployment
+\item
+    Redundancy - either data, control or network plane redundancy
+\item
+    Fault injection/load testing - Simulate situations that might induce a
+    failure (components not equipped to handle high load)
+\item
+    Config checking: Business rules should translate exactly to what is
+    configured at the lower level
+\item
+    Component Isolation: Modularity, meant to avoid an escalation into a
+    service failure if the component fails
+\item
+    Proactive restart: To fix issues like long term memory leaks
+\item
+    Monitoring tools: Better tools to identify the issues quicker
+\item
+    Replace hardware early
+\end{itemize}
+
+\subsubsection{Suggested measures}
+
+\begin{itemize}
+\item
+    Redundancy: Staging hardware to have non-uniform vendors and ages
+\item
+    Operators: More focus on operator failure. Should have something
+    similar to code linting while writing system config files
+\item
+    Failure records repository: Something like JIRA, for accurate issue
+    tracking
+\item
+    Performance and recovery benchmarks: Like having a replica or test
+    instance of the service
+\item
+    Representativeness: Call for more studies on a variety of systems,
+    rather than just the 3 presented in the paper
+\end{itemize}
+
+\subsubsection{Observations}
+
+\begin{itemize}
+\item
+    A large percentage of node operator resulted in service failure,
+    implying that these errors are more difficult to mask with network
+    failures.
+\item
+    Network errors are less likely to be masked using any form of
+    redundancy. They contribute to a major chunk of errors at `ReadMostly'
+\item
+    Operator errors dominate for TTR metrics, also
+\item
+    Most of the operator errors are related to system/application
+    configuration
+\item
+    The second largest cause was software defects, followed by hardware
+    failures
+\item
+    Front-end custom software also tends to have a significant number of
+    errors
+\end{itemize}
+
+\subsection{Load Balancing Techniques}
+
+\begin{itemize}
+\item
+    Round Robin
+\item
+    Least open TCP connections
+\item
+    Fastest response times
+\item
+    Hashing on source IP - route to a specific worker based on origin of
+    the request
+\item
+    Chained failovers - fill up one worker before starting on another
+\item
+    SDN based
+\end{itemize}
+
+\subsection{Architecture - refer to the paper}
+
+\subsection{Types of errors}
+
+\begin{itemize}
+\item
+    Network and node failure (H/W): ref. Bathtub curve; timeline = 0.5 to 3 years
+    \begin{itemize}
+        \item
+        Manufacturing problems
+    \item
+        Wear
+    \end{itemize}
+\item
+    Software defects
+\item
+    Operator error
+\item
+    Environmental problems/disasters
+\item
+    System overload
+\end{itemize}
+
+\subsection{Fixing the errors}
+
+\begin{itemize}
+\item
+    Hardware - attempt reboot; replace
+\item
+    Software - identify bug; fixing it; re-deployment
+\item
+    Operator Error - hardest to diagnose
+\end{itemize}
+
+\subsection{Goals for Mitigation}
+
+\begin{itemize}
+\item
+    Avoid component failure
+\item
+    Quarantine failures
+\item
+    Degrade service
+\item
+    Identify defect quickly
+\item
+    Reduce the time to repair
+\end{itemize}
+
+\subsection{Design for Fault Tolerance}
+
+\begin{itemize}
+\item
+    Modularize system - each module should fail separately
+\item
+    Modules should fail fast (if not working correctly)
+\item
+    Make failures visible
+    \begin{itemize}
+        \item
+        Hearbeat: workers inform central monitor of their availability
+    \item
+        Watchdog: workers are monitored by a central node
+    \item
+        Reduce config: self-tuning, less sysadmin work
+    \item
+        Redundancy: HW, SW and data
+        \begin{itemize}
+                \item
+            Redundancy in SW could be different implementation of the same API
+        \item
+            Primary/Backup model: Master-slave configuration
+
+            \begin{itemize}
+            \item
+                Lock-step execution: Perform ops on both simultaneously
+            \item
+                Checkpointing and replication of state from primary to backup
+            \item
+                Delta-checkpointing: Should only copy the differences since the
+                last checkpoint from the primary to the backup; hard to
+                implement
+            \item
+                Start afresh: No state maintained on the backup
+            \end{itemize}
+        \end{itemize}
+    \item
+        Clean up pending transactions and sessions
+    \end{itemize}
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{2PC \& Pileus}
+
+\subsection{2PC}
+
+\begin{itemize}
+\item
+    Distinction between presumed nothing, presumed abort and presumed
+    commit is made.
+\item
+    The objective of the paper is to ensure reduced logging as an
+    optimization for recovery
+\item
+    2PC required a main memory database at the transaction coordinator to
+    keep records of the currently executing 2PC transactions
+\item
+    The rows corresponding to a particular transaction ID can be flushed
+    if all of the cohorts for that transaction send an ACK to the
+    coordinator
+\item
+    The coordinator makes a commit stable before broadcasting COMMIT
+    messages to the cohort.
+\item
+    NPrC is the touted protocol in the paper, which either performs the
+    same, or better than PrN, PrA and PrC.
+\end{itemize}
+
+\subsection{PrN}
+
+\begin{itemize}
+\item
+    Ideally for PrN, logging occurs twice
+
+    \begin{itemize}
+        \item
+        Just before sending the outcome to the cohort
+    \item
+        Just after received the last expected ACK for a transaction. An END
+        record is also logged to make sure the transaction's entry is `not'
+        restored to the DB
+    \end{itemize}
+\item
+    This means than if the co-ordinator crashed before an outcome is
+    decided, then the cohort that check with it later are asked to abort,
+    as the transaction never made it to the protocol database.
+\item
+    Each of the cohort writes 2 forced log messages, on PREPARE and
+    COMMIT/ABORT, and it sends 2 messages to the coordinator, namely the
+    COMMIT-VOTE/ABORT-VOTE, and the final ACK
+\end{itemize}
+
+\subsection{PrA}
+
+\begin{itemize}
+\item
+    If a transaction aborts, it's entry is deleted from the protocol
+    database, since an abort entry and a non-entry mean the exact same
+    thing.
+\item
+    In summary, PrA commits transactions exactly the same way as PrN, but
+    it aborts transactions more cheaply (i.e.~by the above deletion)
+\end{itemize}
+
+\subsection{PrC}
+
+\begin{itemize}
+\item
+    It maintains an explicit copy of transactions that have been aborted.
+\item
+    If a transaction completes, it's deleted from the protocal database.
+\item
+    If a transaction queried isn't present in the database, it's presumed
+    to have committed.
+\item
+    A commmitted transaction's record shouldn't be re-inserted into the
+    protocol database once the coordinator recovers from a crash.
+\item
+    Coordinatory: 2 forced writes to the log are done by the coordinator
+
+    \begin{itemize}
+        \item
+        At the point the transaction is initiated
+    \item
+        Once an outcome is decided, before sending the COMMIT message to the
+        cohort
+    \end{itemize}
+\item
+    Cohort: 1 forced PREPARE log record, and 1 COMMIT log record.
+\item
+    No final ACK is needed. Once the commit messages are sent out, it's
+    assumed that the outcome was commit. If one among the cohort comes
+    back online and sees only a PREPARE in it's logs, it'll query the
+    coordinator, and if it finds that the transaction doesn't exist in the
+    protocol database, it'll assume that the outcome was COMMIT, and
+    proceed with committing it.
+\end{itemize}
+
+\subsection{NPrC}
+
+\begin{itemize}
+    \item
+    Instead of full knowledge of active transactions (given by the
+    log-write at the time of initiation), it uses an approximation of
+    transactions that may have been active at the time of the crash.
+    \item
+    It defines a data structure IN, representative of initiated but uncommitted transactions. They are bounded by a low and high transaction ID and the data structure looks like: $$<tid_l, tid_h, COM \cap REC >$$ where COM is a list of completed transactions and REC is a list of recent transactions.
+    \item
+    $tid_h$ is determined by adding an abitrary value to the last $tid$ stored stably to the log.
+    $$tid_h = tid_{sta} + \Delta$$
+    Or, we can simply periodically flush the value of $tid_h$ to the log.
+    \item
+    $tid_l$ is written to the log each time a commit or abort record needs to be made anyway. So no excess forced log writes are needed.
+    \item
+    IN = transactions that may have initiated but did not commit.
+    \item 
+    The representation of the set IN can be done using either using a bit vector, for contiguously incremented tids (dense), or it can also be done using timestamps (sparse). The IN data structure can never be deleted, because we never know when any of the cohort could come asking for them, and they shouldn't be presumed to be committed.
+    \item 
+    NPrC doesn't need the list of cohorts involved in a transaction, as opposed to PrC, which requires the cohorts so that the controller can check the cohort off a list, and then eventually delete the record if all ACK a commit, and keep it in the database if any one of the cohort ACKs an abort.
+\end{itemize}
+
+\subsection{Observations}
+
+\begin{itemize}
+\item
+    PrA is advantageous over PrC because PrC force writes both its log
+    records, whereas PrA forces only one.
+\item
+    PrC has the obvious advantage with respect to messages, as it has
+    fewer that need to be broadcast.
+\item
+    What needs to be done is to optimize PrC such that it's logging
+    overhead is significantly lowered.
+\end{itemize}
+
+\subsection{Class Discussion}
+
+Consistency controls the semantics of what value of a given data segment
+is valid to request.\\
+Scenario of replicated data and the fact that there is a slight delay in
+consistency when the transaction is distributed to update the multiple
+sites.
+
+Types of consistency:
+
+\begin{itemize}
+\item
+    Strong
+
+    \begin{itemize}
+        \item
+        Used for financial transactions
+    \end{itemize}
+\item
+    Eventual
+
+    \begin{itemize}
+        \item
+        Lazy replication involved
+    \end{itemize}
+\item
+    Bounded
+
+    \begin{itemize}
+        \item
+        Returns data up to `t' seconds old
+    \end{itemize}
+\item
+    Read-my-writes
+
+    \begin{itemize}
+        \item
+        In the same session, if a write has happened before the current
+        operation, then read the value writted by that write
+    \item
+        Else, fall back to eventual consistency
+    \end{itemize}
+\item
+    Causal
+
+    \begin{itemize}
+        \item
+        If there is a causal relation between the value being read and a
+        write operation written earlier in the session, return the version
+        at least at the point of the causal write.
+    \item
+        Else fall back to eventual, similar to read-my-writes
+    \end{itemize}
+\item
+    Monotonic
+
+    \begin{itemize}
+        \item
+        Should return at least the latest read issued for the same value
+    \item
+        If a previous read is not, found, then use the value written by a
+        previous Put
+    \end{itemize}
+\end{itemize}
+
+Strong and eventual are at the opposite end of the spectrum
+
+\subsubsection{Pileus}
+Pileus is a replicated key-value store that allows applications to declare their consistency and latency priorities via consistency-based service level agreements (SLAs)
+
+\textbf{About Pileus:}
+\begin{itemize}
+    \item 
+    Applications don't even need to specify the desired consistency. They only need to specify an SLA and the Pileus system will utilize a consistency metric to perform the requested action within the SLA.
+    \item 
+    There are applications that prioritize latency over strong consistency and vice-versa. A shopping cart or a video game prefer latency and can tolerate inconsistency. However, banks portals can tolerate additional latency for strongly consistent data. Some applications may prefer strongly consistent data but it still might be worth speculatively executing over data obtained from an eventually consistent source.
+    \item 
+    Consistency and latency targets are detemined by a parameter called subSLA. Multiple subSLAs make up an SLA. 
+\end{itemize}
+
+\textbf{Consistency Types:}
+\begin{itemize}
+    \item
+    strong: A Get(key) returns the value of the last
+    preceding Put(key) performed by any client.
+    \item
+    eventual: A Get(key) returns the value written by
+    any Put(key), i.e. any version of the object with the
+    given key; clients can expect that the latest version
+    eventually would be returned if no further Puts
+    were performed, but there are no guarantees
+    concerning how long this might take.
+    \item
+    read-my-writes: A Get(key) returns the value
+    written by the last preceding Put(key) in the same
+    session or returns a later version; if no Puts have
+    been performed to this key in this session, then the
+    Get may return any previous value as in eventual
+    consistency.
+    \item
+    monotonic: A Get(key) returns the same or a later
+    version as a previous Get(key) in this session; if the
+    session has no previous Gets for this key, then the
+    Get may return the value of any Put(key).
+    \item
+    bounded(t): A Get(key) returns a value that is stale
+    by at most t seconds. Specifically, it returns the
+    value of the latest Put(key) that completed more
+    than t seconds ago or some more recent version.
+    \item
+    causal: A Get(key) returns the value of a latest
+    Put(key) that causally precedes it or returns some
+    later version. The causal precedence relation < is
+    defined such that op1<op2 if either
+    (a) op1 occurs before op2 in the same session,
+    (b) op1 is a Put(key) and op2 is a Get(key) that
+    returns the version put in op1, or
+    (c) for some op3, op1<op3 and op3<op2
+\end{itemize}
+
+\textbf{Implementation Details:}
+\begin{itemize}
+    \item 
+    Infrastructure involves a client, primary site, and a list of secondary sites.
+    \item 
+    Timeline Consistency: A client requests a value, with a given timestamp, and the site it requests returns values with a timestamp after the timestamp specified
+    \item 
+    Pileus API requires value and timestamp as parameters
+    \item 
+    If a node doesn't contain the value of the value after a given time, the request needs to be re-directed to the primary node.
+    \item 
+    Primary node could be a cluster of nodes that are strongly consistent using Paxos.
+\end{itemize}
+
+\subsubsection{2PC}
+
+\paragraph{Failure Scenarios}
+
+\begin{itemize}
+\item
+    Site not responding with vote - either ask again, or fail.
+\item
+    Outcome not received - cohort keeps requesting the co-ordinator
+\item
+    If the co-ordinator fails before outcome, feign ignorance and presume
+    abort if the init log hasn't been writted to the log.
+\item
+    After the outcome is arrived at, force a log-write.
+\end{itemize}
+
+\paragraph{Misc}
+
+\begin{itemize}
+\item
+    fsync -\textgreater{} Linux command to flush buffers to disk
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Paxos \& Raft}
+
+\subsection{Paxos}
+
+\begin{itemize}
+\item
+    Core concept - Synod algorithm
+\item
+    Reference to the state machine approach for building a distributed
+    system
+\item
+    Core requirements of Consensus
+
+    \begin{itemize}
+        \item
+        The chosen value should be among the ones suggested.
+    \item
+        Only one suggestion must be chosen.
+    \item
+        The participants must know of the chosen value only after it's
+        chosen.
+    \end{itemize}
+\item
+    Agents in the consensus process: Proposers, acceptors and learners.
+\item
+    The simplest way forward is to have a single acceptor, but it becomes
+    a single point for failure for the entire system.
+\item
+    Another idea is to have multiple acceptors, and a majority set of
+    acceptors have their value chosen, given that an acceptor can accept
+    at most one value.
+
+    \begin{itemize}
+        \item
+        P1 - Under the above assumption, one method is for an acceptor to
+        accept the first proposal it receives.
+    \item
+        But in this case, there could be a scenario with no clear majority,
+        each acceptor might have a different value.
+    \item
+        Even if there are only 2 different values, and it's split equally
+        among the acceptors, failure of a single acceptor will prevent
+        idenfication of what the value should be.
+    \item
+        Hence, acceptors should be able to accept multiple proposals.
+    \end{itemize}
+\item
+    To allow for multiple proposal acceptance, each proposal is assigned a
+    natural number identifier.
+\item
+    P2 - If a proposal with identifier `n' is chosen and has value `v',
+    then every proposal chosen with idenfifier greater than `n' should
+    also have a value `v'.
+\item
+    P1 is still assumed here, but only for the first acceptor. All
+    subsequent acceptors can accept only proposals with value `v'.
+\item
+    When proposing a value `v' with a proposal identifier `n', a proposor
+    must
+
+    \begin{itemize}
+        \item
+        Ask the acceptors, if they've accepted any proposals with identifier
+        \textless{} n
+    \item
+        If not, tell the acceptors not to accept any proposal identifier
+        \textless{} n
+    \item
+        Once it receives responses, if the acceptors have accepted a value
+        already, they return the identifiers. Or they say that they've
+        accepted no proposals.
+
+        \begin{itemize}
+                \item
+            If the acceptors return identifiers, the proposer must return the
+            `v' associated with the highest-values identifier.
+        \item
+            If the acceptors say they've accepted no proposals, the the
+            proposer chooses the value of `n'
+        \end{itemize}
+    \end{itemize}
+\item
+    If an acceptor receives a prepare request with identifier greater than
+    a number it has already accepted, it ignores the request.
+\end{itemize}
+
+\subsubsection{State maintained}
+
+\begin{itemize}
+\item
+    Acceptors keep track of the highest-numbered proposal they have
+    accepted and the highest-numbered prepare request they have responded
+    to
+\item
+    Proposers keep track of the highest-numbered proposal they have
+    proposed
+\end{itemize}
+
+\subsubsection{Implementation}
+
+\begin{itemize}
+\item
+    In the actual implementation of Paxos, each of the processes play all
+    the roles i.e.~proposer, acceptor and learner
+\item
+    Acceptors record their response (state) in stable memory before
+    responding to prepare requests.
+\item
+    The numbers proposed by the proposers are disjoint sets, and only
+    issue numbers greater than what they've recorded to be the highest
+    number previously proposed.
+\item
+    Gaps in the operation sequences are permitted in the case of failures.
+    (Referred to in the paper as no-ops)
+\end{itemize}
+
+\subsubsection{Class Notes}
+
+\begin{itemize}
+\item
+    Unlike 2PC, a majority is sufficient to perform an operation, as
+    opposed to all of the systems.
+\item
+    R + W \textgreater{} N, and W \textgreater{} (N/2) are the rules of
+    the quorum.
+\item
+    Prepare response
+
+    \begin{itemize}
+        \item
+        If current\_identifier \textless{} max\_identifier\_accepted, then
+        ignore (this is a reject for the proposer)
+    \item
+        If current\_identifier \textgreater{}= max\_identifier\_accepted,
+        then return accepted value
+    \end{itemize}
+\item
+    Accept phase
+
+    \begin{itemize}
+        \item
+        If an identifier is received in the prepare response, then proceed
+        with the value already accepted.
+    \item
+        If not, then proceed with the value proposed earlier.
+    \end{itemize}
+\item
+    When defining the operations on the state machine as a log,
+    Multi-Paxos is the application of basic paxos on every log entry.
+\end{itemize}
+
+\subsection{Raft}
+
+\begin{itemize}
+\item
+    \textbf{The greatest difference between Paxos and Raft is strong
+    leadership.}
+\item
+    A more applied approach to implementing a consensus algorithms
+\item
+    Guarantees safety in all situations, availability in the case of a
+    majority of the cluster being online
+\item
+    Rather than using single-decree Paxos as the least commmon
+    denominator, an operation is a log entry for Raft.
+\item
+    Raft enforces a strong leadership policy, which mandates that a leader
+    is the only instance that can decide the ordering of log entries.
+\item
+    The roles are leader, follower and candidate.
+\item
+    A candidate only exists during the period of an election.
+\item
+    The leader is responsible for replicating the log order it determines
+    to the followers.
+\item
+    A leader informs it's followers of it's role as a leader using an
+    AppendLog RPC
+\item
+    Both leader election and log replication are done using RPCs.
+\item
+    A leader periodically sends a heartbeat which is an AppendLog RPC with
+    no logs contained, failure of which will prompt the followers to
+    initiate a leader election, after incrementing it's current term.
+\item
+    Each of the replicated systems has a copy of the current term of
+    leadership, which is, for Raft, the defined clock, so to speak.
+\item
+    The current term is exchanged whenever the servers communicate.
+\item
+    When initiating an election, a candidate always increments a term.
+\item
+    To address the risk of returning stale data from a node that thinks
+    it's a leader,
+
+    \begin{itemize}
+        \item
+        The leader writes a no-op entry at the beginning of it's term
+    \item
+        The leader verifies whether it's been deposed before processing any
+        read requests.
+    \end{itemize}
+\item
+    Once a leader is elected, it needs to decide which log-entries are
+    purged to maintain log consistency across the cluster
+
+    \begin{itemize}
+        \item
+        For this reason, an up-to-date log is one of the pre-requisities of
+        a candidate. (This is to ensure that the new leader isn't lagging
+        behind some followers). If the followers are lagging, the leader can
+        always replicate segments of the log it possesses, so that the
+        followers can update theirs.
+    \end{itemize}
+\item
+    Leader should commit only after one log record of it's own term is
+    committed. (This is to avoid already committed records from being
+    erased due to leader failure)
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Concurrency - Server Design}
+
+\subsection{Metrics for evaluation of server}
+
+\begin{itemize}
+\item
+    Throughput
+\item
+    Ease of dev \& maintenance
+\item
+    Fairness
+\item
+    Latency
+
+    \begin{itemize}
+        \item
+        Predictability of latency degradation is desirable.
+    \item
+        Tail latency - worst case requests.
+    \item
+        Reasons for variability in latency:
+
+        \begin{itemize}
+                \item
+            Slow device with high variance (eg. of seek variance depending on
+            position of head for disk seeks)
+        \item
+            Caches (cache-hit vs cache-miss results in high variance)
+        \item
+            Workload
+        \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+\subsection{Server Architectures}
+
+\begin{itemize}
+\item
+    Single process: low throughput, high latency, low fairness, easy
+    programmability
+\item
+    Multi process: low throughput, high latency, good fairness, harder
+    programmability than single process architectures.
+\item
+    Multi threaded: low throughput, high latency, good fairness, harder
+    programmability than single process architectures, but easier than
+    multi-process arch
+\item
+    Thread-pooling: high throughput, high latency, low fairness, harder
+    programmability than single process architectures, but easier than
+    multi-process arch
+\item
+    Event-based: high throughput, low latency, low fairness, harder
+    programmability
+
+    \begin{itemize}
+        \item
+        Non-blocking I/O
+    \item
+        Asymmetric multi-process eventdriven (AMPED) is an example of an
+        event-based architecture
+    \end{itemize}
+\end{itemize}
+
+\subsection{SEDA}
+
+\begin{itemize}
+\item
+    Core idea: Divide the processing into stages that communicate through
+    task-queues
+
+    \begin{itemize}
+        \item
+        A stage reads from it's queue, completed processing and pushes a
+        task into another queue
+    \item
+        Easier to test, medium-hard to develop (since there is per-stage
+        control, unit testing is simpler)
+    \end{itemize}
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{File-Systems}
+
+\subsection{Linux File system stack}
+
+\begin{itemize}
+\item
+    Application - POSIX calls (User-space)
+\item
+    Virtual File System - Abstraction for the physical file system
+\item
+    VFS struct per filesystem - an abstraction
+
+    \begin{itemize}
+        \item
+        Metadata
+    \item
+        List of implemented operations
+    \item
+        UNode maintained per file directory
+    \end{itemize}
+\item
+    New file systems can be mounted on the VFS at run-time
+\end{itemize}
+
+\subsection{NFS}
+The objective is to make remote files accessible as if they're local
+files\\
+The protocol is stateless (implying easier crash recovery, lower
+overhed, but limited programming features)\\
+The problems with managing concurrent writes/reads was solved uses
+leases (periodically expiring file access exclusivity to clients)
+
+\subsubsection{Commands}
+
+\begin{itemize}
+\item
+    Mount - client(saddr, laddr, spath, lpath) - returns file handle of
+    the node mounted
+
+    \begin{itemize}
+        \item
+        Path Translation done using a step-by-step lookup (needed because
+        any node could also be a mount point
+    \item
+        Read operation - Client sends the read request in the form on an
+        RPC. Server does the read for the client
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Optimizations}
+
+\begin{itemize}
+\item
+    Read ahead - reading subsequent blocks ahead of time
+\item
+    Write behind - write to cache and periodically flush to stable
+    storage\\
+    These optimizations will result in harder failure handling and
+    managing concurrent writes and reads by different clients
+\end{itemize}
+
+\subsection{LFS}
+
+Writing a small amount of data causes a huge overhead due to the
+metadata being read, modified and written back.
+
+\subsubsection{Components of a typical file-system}
+
+\begin{itemize}
+\item
+    INode Table
+\item
+    INode Bitmap
+\item
+    Data Bitmap
+\item
+    Data blocks
+\end{itemize}
+
+\subsubsection{Components of LFS}
+
+\begin{itemize}
+\item
+    Inode Map is used to look up the Inodes being written to the system
+\item
+    Changes to the Inode map are also written sequentially
+\item
+    A `Checkpoint Region' is present at fixed blocks on the disk, which
+    point to these inode map blocks written into the LFS
+\end{itemize}
+
+\subsubsection{How it works}
+
+\begin{itemize}
+\item
+    A change is pushed to the log in terms of it's new data, the inode
+    modified and the updated version on the inode map
+\item
+    The reads will mostly be served from the in-memory cache, and the LFS
+    is used primarily to deal with writes.
+\item
+    Writes are accumulated before flushing to disk, to ensure that the
+    disk bandwidth is maximized and too much time isn't spend seeking.
+\end{itemize}
+
+\subsection{Garbage collection}
+
+\begin{itemize}
+\item
+    Read set of segments
+\item
+    Copy live data to new segments
+\item
+    Write new segments to log, and update the inode map
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Deduplication}
+
+\begin{itemize}
+\item
+    The motivation is to reduce the storage and network overhead.
+\item
+    Applications include network optimization and archiving
+\end{itemize}
+
+\subsection{LBFS}
+
+\begin{itemize}
+\item
+    The motivation is to have a network file system that works well over
+    wide area networks (WANs)
+\item
+    The assumption made is that files written by applications have a good
+    amount of similarity to other files or previous versions of the same
+    file.
+\item
+    LBFS divides the written file into chunks and stores chunks by hash
+    value. Before transmitting, a simple hash value lookup will indicate
+    if the recipient already has the chunk.
+\item
+    A filemap datastructure is used by the client to tell the server how
+    to stitch together the data chunks it possesses.
+\item
+    SHA-1 used to compute the hashes of the data chunks. SHA-1 is a 64-bit
+    hash. It has a low but non-negligible chance of a hash collision. LBFS
+    doesn't rely on the chunk database for correctness. It recomputes the
+    hashes and checks for collisions.
+\item
+    For LBFS, each data chunk is comprised of 48B overlapping regions of a
+    file. The fingerprint is calculated for each, and if the fingerprint
+    is equal to a pre-defined targe value, then treat that part as a chunk
+    boundary. Now if there is a change in an intermediate chunk, only that
+    chunk will change by either becoming larger or by splitting into 2
+    separate chunks.
+\item
+    The chunk size depends on the window size on average. If the chunk
+    size is 1MB, then the window size should be approx 10 bits. A smaller
+    chunk size ensures better compression on the network, but higher
+    overhead for indexing.
+\item
+    RPC traffic is compressed using gzip.
+\item
+    LFBS uses a database to identify the duplicate chunks
+\item
+    LBFS utilized leases for file handles and uses aggressive pipelining
+    to handle incoming RPC requests.
+\item
+    GETHASH is a protocol command not present in NFS, but used by LBFS to
+    obtain the hashes that correspond to the file it's trying to read.
+\item
+    While writing updates, temporary file creation and commands are used,
+    so that the file write is atomic and the original file remains
+    uncorrupted if the process is terminated midway.
+\end{itemize}
+
+\subsection{Data Domain}
+
+\begin{itemize}
+\item
+    The motivation for data domain is disk deduplication, and maximizing
+    the throughput to write the new data segments to disk.
+\item
+    Core concepts
+
+    \begin{itemize}
+        \item
+        Uses a Bloom Filter implementation called a Summary vector to
+        perform lookups. The objective of a Bloom filter is to acheive a 0\%
+        false negative lookup quickly.
+    \item
+        Uses a Stream-Informed Segment Layout (SISL) to store the data
+        segments and their fingerprints in the same order as they occur in a
+        file.
+    \item
+        Locality preserved caching, uses the segment layout to cache groups
+        of segments that are likely to be accessed together.
+    \end{itemize}
+\item
+    If the Bloom filter lookup indicates a positive result, then the index
+    is re-checked to avoid the possibility of false positives.
+\item
+    Streams are stored in a per-stream container, which in turn, is stored
+    in a log structured format. When a segment needs to be read, it's
+    container is read instead.
+\end{itemize}
+
+\end{document}
